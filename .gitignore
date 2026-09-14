@@ -1,0 +1,22 @@
+# Local environments and generated Python files
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+
+# Local data and generated assets
+*.sqlite3
+staticfiles/
+media/
+
+# Environment files (keep documented examples)
+.env
+.env.*
+!.env.example
+
+# Frontend and deployment output
+node_modules/
+dist/
+.vercel/
+
+.DS_Store

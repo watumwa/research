@@ -10,5 +10,12 @@ class CustomUserAdmin(UserAdmin):
             'onboarding_completed','email_verified','notification_preferences','terms_accepted_at','terms_version'
         )}),
     )
-    list_display = ('username','email','first_name','last_name','role','email_verified','onboarding_completed','is_active')
-    list_filter = ('role','email_verified','onboarding_completed','is_staff','is_active')
+    list_display = ('email', 'display_name_column', 'role', 'email_verified', 'onboarding_completed', 'is_active', 'date_joined')
+    list_filter = ('role', 'email_verified', 'onboarding_completed', 'is_staff', 'is_active')
+    search_fields = ('email', 'username', 'first_name', 'last_name', 'organization')
+    ordering = ('-date_joined',)
+    list_per_page = 25
+
+    @admin.display(description='Name', ordering='first_name')
+    def display_name_column(self, obj):
+        return obj.display_name
