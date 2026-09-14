@@ -12,6 +12,10 @@ IS_VERCEL = bool(os.getenv('VERCEL'))
 DEBUG = os.getenv('DJANGO_DEBUG', 'False' if IS_VERCEL else 'True').lower() == 'true'
 default_hosts = 'localhost,127.0.0.1,.vercel.app' if IS_VERCEL else 'localhost,127.0.0.1'
 ALLOWED_HOSTS = [x.strip() for x in os.getenv('DJANGO_ALLOWED_HOSTS', default_hosts).split(',') if x.strip()]
+for vercel_host_var in ('VERCEL_URL', 'VERCEL_PROJECT_PRODUCTION_URL'):
+    host = os.getenv(vercel_host_var, '').strip().replace('https://', '').replace('http://', '').strip('/')
+    if host and host not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append(host)
 
 INSTALLED_APPS = [
     'unfold',
@@ -178,8 +182,12 @@ MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-CORS_ALLOWED_ORIGINS = [x.strip() for x in os.getenv('CORS_ALLOWED_ORIGINS', 'http://localhost:5173').split(',') if x.strip()]
-CSRF_TRUSTED_ORIGINS = CORS_ALLOWED_ORIGINS.copy()
+def csv_env(name, default=''):
+    return [x.strip().rstrip('/') for x in os.getenv(name, default).split(',') if x.strip()]
+
+CORS_ALLOWED_ORIGINS = csv_env('CORS_ALLOWED_ORIGINS', 'http://localhost:5173')
+CORS_ALLOWED_ORIGIN_REGEXES = csv_env('CORS_ALLOWED_ORIGIN_REGEXES')
+CSRF_TRUSTED_ORIGINS = csv_env('CSRF_TRUSTED_ORIGINS') or CORS_ALLOWED_ORIGINS.copy()
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': ('rest_framework_simplejwt.authentication.JWTAuthentication',),
@@ -202,7 +210,7 @@ EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '')
 EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
 EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', 'True').lower() == 'true'
 DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'no-reply@localhost')
-FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:5173')
+FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:5173').rstrip('/')
 GOOGLE_OAUTH_CLIENT_ID = os.getenv('GOOGLE_OAUTH_CLIENT_ID', '')
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 

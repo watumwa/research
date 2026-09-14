@@ -254,3 +254,7 @@ These are external/client decisions rather than missing GUI code:
 8. final real photographs/testimonials/contact details.
 
 The V5 source is structured so these can be configured without redesigning the learner experience.
+
+## Vercel deployment
+
+If frontend and backend are deployed as separate Vercel projects, read `VERCEL_DEPLOYMENT.md`. The frontend must be built with `VITE_API_URL` and `VITE_BACKEND_URL` pointing to the deployed Django project; the backend must allow the frontend origin through CORS.

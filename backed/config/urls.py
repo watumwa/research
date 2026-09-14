@@ -13,6 +13,7 @@ def health_check(request):
 
 urlpatterns = [
     path('', health_check, name='health-check'),
+    path('api/health/', health_check, name='api-health-check'),
     path('admin/', admin.site.urls),
     path('api/auth/token/', EmailTokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/auth/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
