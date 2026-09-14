@@ -1,0 +1,35 @@
+import { useEffect, useMemo, useState } from 'react'
+import { Link, useParams } from 'react-router-dom'
+import { ArrowLeft, ArrowRight, CheckCircle2, ChevronRight, LockKeyhole, Send, Sparkles, Save } from 'lucide-react'
+import { api } from '../lib/api'
+import Breadcrumbs from '../components/Breadcrumbs'
+import { PageSkeleton } from '../components/Skeleton'
+import { useToast } from '../context/ToastContext'
+
+export default function LessonPage(){
+ const {slug}=useParams(); const {toast}=useToast(); const [lesson,setLesson]=useState(null); const [error,setError]=useState(null); const [answers,setAnswers]=useState({}); const [quizResult,setQuizResult]=useState(null); const [practice,setPractice]=useState({}); const [practiceStatus,setPracticeStatus]=useState(''); const [saving,setSaving]=useState(false)
+ useEffect(()=>{setLesson(null);setError(null);setAnswers({});setQuizResult(null);Promise.all([api(`/lessons/${slug}/`),api(`/lessons/${slug}/practice/`).catch(()=>({answers:{}}))]).then(([l,p])=>{setLesson(l);setPractice(p.answers||{})}).catch(setError)},[slug])
+ useEffect(()=>{if(!lesson)return;setPracticeStatus('Unsaved');const id=setTimeout(()=>{api(`/lessons/${slug}/practice/`,{method:'PUT',body:JSON.stringify({answers:practice})}).then(()=>setPracticeStatus('Saved')).catch(()=>setPracticeStatus('Could not save'))},700);return()=>clearTimeout(id)},[practice,lesson,slug])
+ const quiz=lesson?.quiz||[]
+ const complete=async()=>{setSaving(true);try{await api(`/lessons/${slug}/progress/`,{method:'PUT',body:JSON.stringify({percent:100,completed:true,last_position:'end'})});setLesson(v=>({...v,progress:{percent:100,completed:true},course_progress:{...v.course_progress,done:Math.min((v.course_progress?.done||0)+1,v.course_progress?.total||1)}}));toast('Lesson completed.')}catch(e){toast(e.message,'error')}finally{setSaving(false)}}
+ const submitQuiz=async()=>{try{const r=await api('/quiz-attempts/',{method:'POST',body:JSON.stringify({lesson_slug:slug,answers})});setQuizResult(r);toast(r.passed?'Knowledge check passed.':'Review the lesson and try again.',r.passed?'success':'info')}catch(e){toast(e.message,'error')}}
+ if(error?.status===403){const r=error.data?.resource;return <div className="locked-lesson"><LockKeyhole/><span className="page-kicker">PREMIUM RESOURCE</span><h1>{r?.title||'This lesson is locked'}</h1><p>{r?.summary||'Purchase access to continue.'}</p><Link className="button button--gold" to={r?`/resources/${r.slug}`:'/resources'}>View access options <ChevronRight/></Link></div>}
+ if(error)return <div className="error-banner">{error.message}</div>
+ if(!lesson)return <PageSkeleton/>
+ const nav=lesson.navigation||{}
+ return <div className="lesson-page lesson-page--reader"><Breadcrumbs items={[{label:'Home',to:'/dashboard'},{label:lesson.course_title,to:`/courses/${lesson.course_slug}`},{label:lesson.module_title},{label:lesson.title}]}/><header className="lesson-header"><div className="lesson-context"><span className="page-kicker">{lesson.kind.toUpperCase()} · {lesson.duration_minutes} MIN</span><span>{nav.position} of {nav.total} lessons</span></div><h1>{lesson.title}</h1><p>{lesson.summary}</p><div className="course-progress-mini"><div><i style={{width:`${lesson.course_progress?.percent||0}%`}}/></div><span>{lesson.course_progress?.done||0}/{lesson.course_progress?.total||0} course lessons complete</span></div></header><main className="lesson-body"><div className="practice-save-state"><Save size={15}/>{practiceStatus||'Practice saved to your account'}</div>{lesson.content.map((block,i)=><ContentBlock key={i} block={block} value={practice[i]||''} onChange={v=>setPractice({...practice,[i]:v})}/>) }
+ {quiz.length>0&&<section className="quiz-panel"><div className="quiz-heading"><Sparkles/><div><span className="page-kicker">KNOWLEDGE CHECK</span><h2>Check your understanding.</h2></div></div>{quiz.map(q=><div className="quiz-question" key={q.id}><strong>{q.question}</strong><div className="quiz-options">{q.options.map(o=><button type="button" key={o} className={answers[q.id]===o?'selected':''} onClick={()=>setAnswers({...answers,[q.id]:o})}>{o}</button>)}</div></div>)}<button className="button button--primary" disabled={Object.keys(answers).length<quiz.length} onClick={submitQuiz}>Check answers <Send size={16}/></button>{quizResult&&<div className={`quiz-result ${quizResult.passed?'passed':''}`}><strong>{quizResult.score}%</strong><span>{quizResult.passed?'Passed. You can move on when ready.':'Review the explanation and try again.'}</span></div>}</section>}
+ <section className="lesson-finish"><CheckCircle2/><div><h2>{lesson.progress?.completed?'Lesson complete':'Finished this lesson?'}</h2><p>Mark it complete so your course progress stays accurate.</p></div><button onClick={complete} disabled={saving||lesson.progress?.completed} className="button button--gold">{lesson.progress?.completed?'Completed':saving?'Saving…':'Mark complete'}</button></section>
+ {lesson.references?.length>0&&<section className="references"><h3>References</h3>{lesson.references.map((r,i)=><p key={i}>{r}</p>)}</section>}
+ <nav className="lesson-navigation" aria-label="Lesson navigation"><div>{nav.previous&&<Link to={`/lessons/${nav.previous.slug}`}><ArrowLeft/><span><small>Previous</small><strong>{nav.previous.title}</strong></span></Link>}</div><div>{nav.next&&<Link to={nav.next.locked?'/resources/problem-analysis':`/lessons/${nav.next.slug}`} className="next"><span><small>{lesson.progress?.completed?'Continue to':'Next lesson'}</small><strong>{nav.next.title}</strong></span><ArrowRight/></Link>}</div></nav></main></div>
+}
+
+function ContentBlock({block,value,onChange}){
+ if(block.type==='intro')return <section className="content-intro"><p>{block.text}</p></section>
+ if(block.type==='heading')return <h2 className="content-heading">{block.title}</h2>
+ if(['explain','model','apply','callout'].includes(block.type))return <section className={`learning-block learning-block--${block.type}`}><div className="block-label">{block.type==='explain'?'EXPLAIN':block.type==='model'?'MODEL':block.type==='apply'?'APPLY':'KEY IDEA'}</div>{block.title&&<h3>{block.title}</h3>}<p>{block.text}</p></section>
+ if(block.type==='practice')return <section className="learning-block learning-block--practice"><div className="block-label">PRACTICE</div>{block.title&&<h3>{block.title}</h3>}<p>{block.text}</p><textarea rows="5" placeholder={block.prompt||'Write your response…'} value={value} onChange={e=>onChange(e.target.value)}/><small>Your answer saves automatically to your account.</small></section>
+ if(block.type==='cards')return <div className="content-card-grid">{block.items.map((x,i)=><article key={i}><span>{String(i+1).padStart(2,'0')}</span><h3>{x.title}</h3><p>{x.text}</p></article>)}</div>
+ if(block.type==='table')return <div className="content-table"><div className="content-table-row head">{block.columns.map(c=><strong key={c}>{c}</strong>)}</div>{block.rows.map((r,i)=><div className="content-table-row" key={i}>{r.map((c,j)=><span key={j}>{c}</span>)}</div>)}</div>
+ return block.text?<p>{block.text}</p>:null
+}

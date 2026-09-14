@@ -1,0 +1,15 @@
+import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { ArrowRight, BookMarked, CheckCircle2, LockKeyhole, Search } from 'lucide-react'
+import { api } from '../lib/api'
+import { PageSkeleton } from '../components/Skeleton'
+import Breadcrumbs from '../components/Breadcrumbs'
+
+export default function ResourcesPage(){
+ const [items,setItems]=useState(null); const [error,setError]=useState(''); const [query,setQuery]=useState(''); const [filter,setFilter]=useState('all'); const [sort,setSort]=useState('recommended')
+ useEffect(()=>{api('/resources/').then(setItems).catch(e=>setError(e.message))},[])
+ const filtered=useMemo(()=>{let arr=[...(items||[])];const q=query.trim().toLowerCase();if(q)arr=arr.filter(r=>(r.title+' '+r.summary).toLowerCase().includes(q));if(filter==='free')arr=arr.filter(r=>r.access==='free');if(filter==='premium')arr=arr.filter(r=>r.access==='paid'&&!r.unlocked);if(filter==='purchased')arr=arr.filter(r=>r.unlocked);if(sort==='az')arr.sort((a,b)=>a.title.localeCompare(b.title));if(sort==='price')arr.sort((a,b)=>Number(a.price)-Number(b.price));return arr},[items,query,filter,sort])
+ if(error)return <div className="error-banner">{error}</div>
+ if(!items)return <PageSkeleton/>
+ return <div><Breadcrumbs items={[{label:'Home',to:'/dashboard'},{label:'Resources'}]}/><div className="page-heading"><div><span className="page-kicker">RESOURCE LIBRARY</span><h1>Find the resource you need.</h1><p>Use free review aids or unlock a premium deep-dive when it becomes useful.</p></div></div><div className="resource-toolbar"><div className="resource-search"><Search/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search resources" aria-label="Search resources"/></div><div className="filter-chips" aria-label="Resource filters">{[['all','All'],['free','Free'],['premium','Premium'],['purchased','My access']].map(([k,l])=><button key={k} className={filter===k?'active':''} onClick={()=>setFilter(k)}>{l}</button>)}</div><select value={sort} onChange={e=>setSort(e.target.value)} aria-label="Sort resources"><option value="recommended">Recommended</option><option value="az">A–Z</option><option value="price">Price</option></select></div>{filtered.length?<div className="resource-grid">{filtered.map(r=><Link to={`/resources/${r.slug}`} className={`resource-card ${r.access==='paid'?'resource-card--premium':''}`} key={r.slug}><div className="resource-card-icon">{r.unlocked?<CheckCircle2/>:r.access==='paid'?<LockKeyhole/>:<BookMarked/>}</div><span className="resource-badge">{r.access==='paid'?(r.unlocked?'UNLOCKED':'PREMIUM'):'FREE'}</span><h2>{r.title}</h2><p>{r.summary}</p><div className="resource-card-footer"><strong>{r.access==='paid'&&!r.unlocked?`${Number(r.price).toLocaleString()} ${r.currency}`:'Open resource'}</strong><ArrowRight/></div></Link>)}</div>:<div className="empty-state-action"><Search/><strong>No resources match those filters.</strong><span>Try another search or show all resources.</span><button className="text-button" onClick={()=>{setQuery('');setFilter('all')}}>Clear filters</button></div>}</div>
+}

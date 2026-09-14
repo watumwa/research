@@ -1,0 +1,35 @@
+import { useCallback, useMemo, useState } from 'react'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { ArrowRight, Mail, UserRound } from 'lucide-react'
+import Logo from '../components/Logo'
+import GoogleAuthButton from '../components/GoogleAuthButton'
+import PasswordField, { passwordStrength } from '../components/PasswordField'
+import { useAuth } from '../context/AuthContext'
+
+export function LoginPage(){
+ const {login,googleLogin}=useAuth(); const nav=useNavigate(); const loc=useLocation(); const [data,setData]=useState({email:'',password:''}); const [error,setError]=useState(''); const [busy,setBusy]=useState(false)
+ const destination=loc.state?.from||'/dashboard'
+ const emailError=useMemo(()=>data.email&&!/^\S+@\S+\.\S+$/.test(data.email)?'Enter a valid email address.':'',[data.email])
+ const finish=u=>nav(!u.onboarding_completed?'/onboarding':destination,{replace:true})
+ const submit=async e=>{e.preventDefault();if(emailError)return;setBusy(true);setError('');try{finish(await login(data.email,data.password))}catch(err){setError(err.message)}finally{setBusy(false)}}
+ const handleGoogle=useCallback(async credential=>{setBusy(true);setError('');try{finish(await googleLogin(credential))}catch(err){setError(err.message)}finally{setBusy(false)}},[googleLogin,destination])
+ return <AuthLayout><div className="auth-copy"><span className="kicker">WELCOME BACK</span><h1>Continue where you left off.</h1><p>Your lessons, practice answers, builders and premium access stay connected to your account.</p></div><form className="auth-card" onSubmit={submit} noValidate><h2>Sign in</h2><p>Use Google or your email and password.</p>{loc.state?.reset&&<div className="success-banner">Password updated. You can sign in now.</div>}{error&&<div className="error-banner">{error}</div>}<GoogleAuthButton onCredential={handleGoogle} disabled={busy} onError={setError}/><AuthDivider/><label className={emailError?'field-has-error':''}><span><Mail size={16}/>Email</span><input type="email" required autoComplete="email" value={data.email} onChange={e=>setData({...data,email:e.target.value})}/>{emailError&&<small className="field-error">{emailError}</small>}</label><PasswordField required label="Password" value={data.password} onChange={e=>setData({...data,password:e.target.value})}/><div className="auth-help"><Link to="/forgot-password">Forgot password?</Link></div><button disabled={busy||!!emailError} className="button button--primary button--full">{busy?'Signing in…':'Sign in'} <ArrowRight size={17}/></button><div className="auth-switch">New here? <Link to="/register">Create an account</Link></div></form></AuthLayout>
+}
+
+export function RegisterPage(){
+ const {register,login,googleLogin}=useAuth(); const nav=useNavigate(); const [data,setData]=useState({first_name:'',last_name:'',email:'',password:''}); const [accepted,setAccepted]=useState(false); const [error,setError]=useState(''); const [busy,setBusy]=useState(false); const [touched,setTouched]=useState({})
+ const errors=useMemo(()=>({
+   first_name:touched.first_name&&!data.first_name.trim()?'Enter your first name.':'',
+   last_name:touched.last_name&&!data.last_name.trim()?'Enter your last name.':'',
+   email:touched.email&&!/^\S+@\S+\.\S+$/.test(data.email)?'Enter a valid email address.':'',
+   password:touched.password&&passwordStrength(data.password)<2?'Use at least 8 characters, including a number or uppercase letter.':'',
+ }),[data,touched])
+ const invalid=Object.values(errors).some(Boolean)||!data.first_name.trim()||!data.last_name.trim()||!/^\S+@\S+\.\S+$/.test(data.email)||passwordStrength(data.password)<2||!accepted
+ const submit=async e=>{e.preventDefault();setTouched({first_name:true,last_name:true,email:true,password:true});if(invalid)return;setBusy(true);setError('');try{await register({...data,accepted_terms:true});await login(data.email,data.password);nav('/onboarding',{replace:true})}catch(err){const d=err.data;setError(d&&typeof d==='object'?Object.values(d).flat().join(' '):err.message)}finally{setBusy(false)}}
+ const handleGoogle=useCallback(async credential=>{if(!accepted){setError('Please accept the Terms of Use and Privacy Policy before continuing with Google.');return}setBusy(true);setError('');try{const u=await googleLogin(credential,true);nav(u.onboarding_completed?'/dashboard':'/onboarding',{replace:true})}catch(err){setError(err.message)}finally{setBusy(false)}},[googleLogin,nav,accepted])
+ const field=(key,value)=>({value,onChange:e=>setData({...data,[key]:e.target.value}),onBlur:()=>setTouched({...touched,[key]:true})})
+ return <AuthLayout><div className="auth-copy"><span className="kicker">CREATE YOUR LEARNING SPACE</span><h1>Start simple. Build one skill at a time.</h1><p>Your account saves progress, practice work and guided research drafts in one place.</p></div><form className="auth-card" onSubmit={submit} noValidate><h2>Create account</h2><p>Free to join. Premium resources are optional.</p>{error&&<div className="error-banner">{error}</div>}<GoogleAuthButton onCredential={handleGoogle} disabled={busy} onError={setError}/><AuthDivider/><div className="form-grid"><label className={errors.first_name?'field-has-error':''}><span><UserRound size={16}/>First name</span><input required autoComplete="given-name" {...field('first_name',data.first_name)}/>{errors.first_name&&<small className="field-error">{errors.first_name}</small>}</label><label className={errors.last_name?'field-has-error':''}><span><UserRound size={16}/>Last name</span><input required autoComplete="family-name" {...field('last_name',data.last_name)}/>{errors.last_name&&<small className="field-error">{errors.last_name}</small>}</label></div><label className={errors.email?'field-has-error':''}><span><Mail size={16}/>Email</span><input type="email" required autoComplete="email" {...field('email',data.email)}/>{errors.email&&<small className="field-error">{errors.email}</small>}</label><PasswordField required minLength="8" label="Password" showStrength value={data.password} onChange={e=>setData({...data,password:e.target.value})} onBlur={()=>setTouched({...touched,password:true})} error={errors.password}/><label className="consent-check"><input type="checkbox" checked={accepted} onChange={e=>setAccepted(e.target.checked)}/><span>I agree to the <Link to="/terms" target="_blank">Terms of Use</Link> and <Link to="/privacy" target="_blank">Privacy Policy</Link>.</span></label><button disabled={busy||invalid} className="button button--primary button--full">{busy?'Creating account…':'Create account'} <ArrowRight size={17}/></button><div className="auth-switch">Already have an account? <Link to="/login">Sign in</Link></div></form></AuthLayout>
+}
+
+function AuthDivider(){return <div className="auth-divider"><span>or continue with email</span></div>}
+function AuthLayout({children}){return <div className="auth-page"><header className="auth-header"><Link to="/"><Logo light/></Link><Link to="/" className="text-link">Back to website</Link></header><main className="auth-layout">{children}</main></div>}

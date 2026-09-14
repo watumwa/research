@@ -1,0 +1,2 @@
+export default function Skeleton({lines=3,className=''}){return <div className={`skeleton-card ${className}`} aria-hidden="true"><div className="skeleton-line skeleton-line--title"/>{Array.from({length:lines}).map((_,i)=><div className="skeleton-line" key={i} style={{width:`${90-i*8}%`}}/> )}</div>}
+export function PageSkeleton(){return <div className="page-skeleton"><Skeleton lines={2}/><div className="skeleton-grid"><Skeleton/><Skeleton/><Skeleton/></div></div>}
