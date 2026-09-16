@@ -73,10 +73,25 @@ function PublicHome({materials,onDownload,onSale,focusMaterials=false}){
   const [category,setCategory]=useState('All')
   const [checkout,setCheckout]=useState(null)
   const [notice,setNotice]=useState('')
+  const [featuredIndex,setFeaturedIndex]=useState(0)
+  const [featuredPaused,setFeaturedPaused]=useState(false)
   const published=materials.filter(m=>m.published)
+  const featuredMaterials=[...published].sort((a,b)=>{
+    if(a.access!==b.access) return a.access==='paid'?-1:1
+    return b.downloads-a.downloads
+  }).slice(0,5)
+  const featuredMaterial=featuredMaterials[featuredIndex] || featuredMaterials[0]
   const categories=['All',...new Set(published.map(m=>m.category))]
   const visible=published.filter(m=>(category==='All'||m.category===category) && `${m.title} ${m.description} ${m.category}`.toLowerCase().includes(query.toLowerCase()))
   useEffect(()=>{if(focusMaterials)setTimeout(()=>document.getElementById('materials')?.scrollIntoView(),0)},[focusMaterials])
+  useEffect(()=>{
+    setFeaturedIndex(current=>featuredMaterials.length?current%featuredMaterials.length:0)
+  },[featuredMaterials.length])
+  useEffect(()=>{
+    if(featuredPaused || featuredMaterials.length<2) return
+    const timer=window.setInterval(()=>setFeaturedIndex(current=>(current+1)%featuredMaterials.length),5000)
+    return ()=>window.clearInterval(timer)
+  },[featuredMaterials.length,featuredPaused])
 
   const downloadFree=(m)=>{
     onDownload(m.id)
@@ -105,7 +120,15 @@ function PublicHome({materials,onDownload,onSale,focusMaterials=false}){
     <main>
       <section className="simple-hero" id="home"><div className="simple-container hero-layout">
         <div><span className="eyebrow-simple">LEARN • DOWNLOAD • GROW</span><h1>Learning materials,<br/><em>made simple.</em></h1><p>Browse useful notes and learning resources. Download free materials instantly, or pay once to access premium content.</p><div className="hero-buttons"><a href="#materials" className="simple-btn simple-btn--gold">Browse materials <ArrowRight size={17}/></a><a href="#about" className="plain-link">How it works <ArrowRight size={15}/></a></div></div>
-        <div className="hero-resource-card"><div className="hero-card-head"><FileText/><span>POPULAR MATERIAL</span></div><h3>Chapter One Notes</h3><p>A simple guide to background, problem statement, objectives, scope and significance.</p><div className="hero-card-meta"><span>PDF</span><strong>UGX 15,000</strong></div><a href="#materials" className="simple-btn simple-btn--light">View material</a></div>
+        {featuredMaterial&&<div className="hero-resource-card" onMouseEnter={()=>setFeaturedPaused(true)} onMouseLeave={()=>setFeaturedPaused(false)} onFocus={()=>setFeaturedPaused(true)} onBlur={event=>!event.currentTarget.contains(event.relatedTarget)&&setFeaturedPaused(false)}>
+          <div className="hero-card-content" key={featuredMaterial.id}>
+            <div className="hero-card-head"><FileText/><span>POPULAR MATERIAL</span></div>
+            <h3>{featuredMaterial.title}</h3>
+            <p>{featuredMaterial.description}</p>
+            <div className="hero-card-meta"><span>{featuredMaterial.type}</span><strong>{featuredMaterial.access==='free'?'Free':money(featuredMaterial.price)}</strong></div>
+            <a href="#materials" className="simple-btn simple-btn--light">View material</a>
+          </div>
+        </div>}
       </div></section>
 
       <section className="quick-strip"><div className="simple-container quick-grid"><div><strong>{published.length}</strong><span>Learning materials</span></div><div><strong>{published.reduce((a,m)=>a+m.downloads,0).toLocaleString()}+</strong><span>Total downloads</span></div><div><strong>{published.filter(m=>m.access==='free').length}</strong><span>Free resources</span></div><div><strong>{published.filter(m=>m.access==='paid').length}</strong><span>Premium resources</span></div></div></section>
