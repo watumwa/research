@@ -113,3 +113,42 @@ Before switching to LIVE Flutterwave credentials:
 - Configure the Flutterwave webhook and secret hash.
 - Confirm settlement details in the Flutterwave dashboard.
 - Run at least one low-value LIVE transaction and verify the payment record, settlement, and protected download.
+
+## Explicit payout destination: 256762640590
+
+This build explicitly assigns every verified paid-material sale to the Uganda Mobile Money payout destination below:
+
+```env
+FLW_PAYOUT_MOBILE_NUMBER=256762640590
+FLW_PAYOUT_BANK_CODE=MPS
+FLW_PAYOUT_BENEFICIARY_NAME=Research Skills Payout
+FLW_AUTO_PAYOUT=False
+```
+
+The number is stored server-side only. When Flutterwave verifies a customer payment as successful, Django creates exactly one `StorePayout` record linked one-to-one to that payment. This gives the admin an auditable queue showing the destination, amount, payment reference, Flutterwave transfer ID, and payout status.
+
+### Manual payout mode (recommended first)
+
+Keep:
+
+```env
+FLW_AUTO_PAYOUT=False
+```
+
+The admin can open **Sales & revenue** and click **Send payout**. Django then calls Flutterwave's transfer API. The transfer uses a unique payout reference so repeated page refreshes do not intentionally create a new payout record for the same customer payment.
+
+### Automatic payout mode
+
+After testing with Flutterwave test credentials and confirming your live account is enabled for Uganda Mobile Money transfers, you can change:
+
+```env
+FLW_AUTO_PAYOUT=True
+```
+
+With this enabled, a verified successful customer payment will immediately attempt the linked payout to `256762640590`.
+
+> Important: enabling automatic payout can create real transfers when live Flutterwave credentials are used. Keep it `False` until you have tested your account, available balance, fees, beneficiary details and payout permissions.
+
+### Flutterwave Uganda payout format
+
+The application uses the recipient in international format (`256762640590`). The configured `account_bank` is `MPS`, following Flutterwave's Uganda Mobile Money transfer guidance. If Flutterwave changes the required code for your merchant account, update `FLW_PAYOUT_BANK_CODE` in the backend environment without changing application code.

@@ -258,3 +258,7 @@ The V5 source is structured so these can be configured without redesigning the l
 ## Vercel deployment
 
 If frontend and backend are deployed as separate Vercel projects, read `VERCEL_DEPLOYMENT.md`. The frontend must be built with `VITE_API_URL` and `VITE_BACKEND_URL` pointing to the deployed Django project; the backend must allow the frontend origin through CORS.
+
+### Flutterwave payout destination
+
+The Flutterwave store now has an explicit Uganda Mobile Money payout destination: `256762640590` (local format `0762640590`). Each verified sale creates one server-side payout record. Automatic transfer is disabled by default; admins can send queued payouts from **Sales & revenue**, or enable automatic payouts with `FLW_AUTO_PAYOUT=True` after testing.

@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Material, StorePayment
+from .models import Material, StorePayment, StorePayout
 
 
 class PublicMaterialSerializer(serializers.ModelSerializer):
@@ -58,3 +58,19 @@ class StorePaymentSerializer(serializers.ModelSerializer):
             'customer_phone', 'network', 'amount', 'currency', 'provider', 'tx_ref',
             'flutterwave_transaction_id', 'flw_ref', 'status', 'created_at', 'paid_at'
         ]
+
+
+class StorePayoutSerializer(serializers.ModelSerializer):
+    payment_tx_ref = serializers.CharField(source='payment.tx_ref', read_only=True)
+    customer_email = serializers.CharField(source='payment.customer_email', read_only=True)
+    material_title = serializers.CharField(source='payment.material.title', read_only=True)
+
+    class Meta:
+        model = StorePayout
+        fields = [
+            'id', 'payment', 'payment_tx_ref', 'customer_email', 'material_title',
+            'destination_number', 'destination_bank_code', 'beneficiary_name',
+            'amount', 'currency', 'reference', 'flutterwave_transfer_id', 'status',
+            'created_at', 'initiated_at', 'completed_at'
+        ]
+        read_only_fields = fields

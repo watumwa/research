@@ -3,7 +3,8 @@ from .views import (
     AdminMaterialDetailView, AdminMaterialListCreateView, AdminStoreOverviewView,
     AdminStorePaymentListView, FlutterwaveWebhookView, FreeMaterialDownloadView,
     InitiateStorePaymentView, PaidMaterialDownloadView, PublicMaterialListView,
-    StorePaymentStatusView,
+    StorePaymentStatusView, AdminStorePayoutListView, AdminStorePayoutSendView,
+    AdminStorePayoutRefreshView, AdminPayoutConfigurationView,
 )
 
 urlpatterns = [
@@ -17,4 +18,8 @@ urlpatterns = [
     path('admin/materials/<int:pk>/', AdminMaterialDetailView.as_view(), name='store-admin-material-detail'),
     path('admin/overview/', AdminStoreOverviewView.as_view(), name='store-admin-overview'),
     path('admin/payments/', AdminStorePaymentListView.as_view(), name='store-admin-payments'),
+    path('admin/payout-config/', AdminPayoutConfigurationView.as_view(), name='store-admin-payout-config'),
+    path('admin/payouts/', AdminStorePayoutListView.as_view(), name='store-admin-payouts'),
+    path('admin/payouts/<uuid:payout_id>/send/', AdminStorePayoutSendView.as_view(), name='store-admin-payout-send'),
+    path('admin/payouts/<uuid:payout_id>/refresh/', AdminStorePayoutRefreshView.as_view(), name='store-admin-payout-refresh'),
 ]

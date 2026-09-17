@@ -248,3 +248,9 @@ FLW_SECRET_KEY = os.getenv('FLW_SECRET_KEY', '')
 FLW_SECRET_HASH = os.getenv('FLW_SECRET_HASH', '')
 FLW_BASE_URL = os.getenv('FLW_BASE_URL', 'https://api.flutterwave.com/v3').rstrip('/')
 FLW_HTTP_TIMEOUT = int(os.getenv('FLW_HTTP_TIMEOUT', '25'))
+
+# Explicit merchant payout destination. Keep the phone in international format.
+FLW_PAYOUT_MOBILE_NUMBER = os.getenv('FLW_PAYOUT_MOBILE_NUMBER', '256762640590').strip()
+FLW_PAYOUT_BANK_CODE = os.getenv('FLW_PAYOUT_BANK_CODE', 'MPS').strip() or 'MPS'
+FLW_PAYOUT_BENEFICIARY_NAME = os.getenv('FLW_PAYOUT_BENEFICIARY_NAME', 'Research Skills Payout').strip()
+FLW_AUTO_PAYOUT = os.getenv('FLW_AUTO_PAYOUT', 'False').lower() == 'true'

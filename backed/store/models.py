@@ -81,3 +81,32 @@ class StorePayment(TimeStampedModel):
 
     def __str__(self):
         return f'{self.customer_email} · {self.material.title} · {self.amount} {self.currency} · {self.status}'
+
+
+class StorePayout(TimeStampedModel):
+    class Status(models.TextChoices):
+        QUEUED = 'queued', 'Queued'
+        PROCESSING = 'processing', 'Processing'
+        SUCCESSFUL = 'successful', 'Successful'
+        FAILED = 'failed', 'Failed'
+        CANCELLED = 'cancelled', 'Cancelled'
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    payment = models.OneToOneField(StorePayment, related_name='payout', on_delete=models.PROTECT)
+    destination_number = models.CharField(max_length=20)
+    destination_bank_code = models.CharField(max_length=20, default='MPS')
+    beneficiary_name = models.CharField(max_length=180, default='Research Skills Payout')
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    currency = models.CharField(max_length=8, default='UGX')
+    reference = models.CharField(max_length=80, unique=True)
+    flutterwave_transfer_id = models.CharField(max_length=80, blank=True)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.QUEUED)
+    metadata = models.JSONField(default=dict, blank=True)
+    initiated_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.reference} · {self.amount} {self.currency} → {self.destination_number} · {self.status}'

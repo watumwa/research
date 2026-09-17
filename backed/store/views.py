@@ -11,11 +11,11 @@ from rest_framework.views import APIView
 
 from learning.permissions import IsEditorOrAdmin
 from .flutterwave import (
-    FlutterwaveError, generate_tx_ref, initiate_uganda_mobile_money,
-    normalize_ugandan_phone, transaction_matches, verify_by_reference,
+    FlutterwaveError, generate_tx_ref, get_transfer, initiate_mobile_money_payout,
+    initiate_uganda_mobile_money, normalize_ugandan_phone, transaction_matches, verify_by_reference,
 )
-from .models import Material, StorePayment
-from .serializers import AdminMaterialSerializer, PublicMaterialSerializer, StorePaymentSerializer
+from .models import Material, StorePayment, StorePayout
+from .serializers import AdminMaterialSerializer, PublicMaterialSerializer, StorePaymentSerializer, StorePayoutSerializer
 
 
 def unique_slug_for_material(title, instance=None):
@@ -31,6 +31,50 @@ def unique_slug_for_material(title, instance=None):
     return slug
 
 
+
+def ensure_payout_for_payment(payment):
+    """Create one auditable payout instruction for every successful store payment."""
+    payout, _ = StorePayout.objects.get_or_create(
+        payment=payment,
+        defaults={
+            'destination_number': settings.FLW_PAYOUT_MOBILE_NUMBER,
+            'destination_bank_code': settings.FLW_PAYOUT_BANK_CODE,
+            'beneficiary_name': settings.FLW_PAYOUT_BENEFICIARY_NAME,
+            'amount': payment.amount,
+            'currency': payment.currency,
+            'reference': f'PAYOUT-{str(payment.id).replace("-", "")[:24]}',
+        },
+    )
+    return payout
+
+
+def send_payout(payout):
+    if payout.status == StorePayout.Status.SUCCESSFUL:
+        return payout
+    body = initiate_mobile_money_payout(payout)
+    data = body.get('data') or {}
+    payout.flutterwave_transfer_id = str(data.get('id', ''))[:80]
+    raw_status = str(data.get('status', '')).lower()
+    payout.status = StorePayout.Status.PROCESSING if raw_status not in {'successful', 'failed'} else raw_status
+    payout.initiated_at = timezone.now()
+    if payout.status == StorePayout.Status.SUCCESSFUL:
+        payout.completed_at = timezone.now()
+    payout.metadata = {**(payout.metadata or {}), 'initiation': body}
+    payout.save()
+    return payout
+
+
+def maybe_auto_payout(payment):
+    payout = ensure_payout_for_payment(payment)
+    if settings.FLW_AUTO_PAYOUT and payout.status in {StorePayout.Status.QUEUED, StorePayout.Status.FAILED}:
+        try:
+            send_payout(payout)
+        except FlutterwaveError as exc:
+            payout.status = StorePayout.Status.FAILED
+            payout.metadata = {**(payout.metadata or {}), 'initiation_error': str(exc)}
+            payout.save(update_fields=['status', 'metadata', 'updated_at'])
+    return payout
+
 def verify_and_update(payment):
     if payment.status == StorePayment.Status.PAID:
         return payment
@@ -42,6 +86,7 @@ def verify_and_update(payment):
             flw_ref=data.get('flw_ref', ''),
             metadata={'verification': data},
         )
+        maybe_auto_payout(payment)
     elif str(data.get('status', '')).lower() in {'failed', 'cancelled'}:
         payment.status = StorePayment.Status.FAILED
         payment.metadata = {**(payment.metadata or {}), 'verification': data}
@@ -256,3 +301,72 @@ class AdminStorePaymentListView(generics.ListAPIView):
         if status_q:
             qs = qs.filter(status=status_q)
         return qs[:250]
+
+
+class AdminStorePayoutListView(generics.ListAPIView):
+    permission_classes = [IsEditorOrAdmin]
+    serializer_class = StorePayoutSerializer
+    pagination_class = None
+
+    def get_queryset(self):
+        return StorePayout.objects.select_related('payment', 'payment__material').order_by('-created_at')[:250]
+
+
+class AdminStorePayoutSendView(APIView):
+    permission_classes = [IsEditorOrAdmin]
+
+    def post(self, request, payout_id):
+        payout = get_object_or_404(StorePayout.objects.select_related('payment'), id=payout_id)
+        if payout.payment.status != StorePayment.Status.PAID:
+            return Response({'detail': 'Only verified paid transactions can be paid out.'}, status=400)
+        if payout.status == StorePayout.Status.SUCCESSFUL:
+            return Response(StorePayoutSerializer(payout).data)
+        try:
+            send_payout(payout)
+        except FlutterwaveError as exc:
+            payout.status = StorePayout.Status.FAILED
+            payout.metadata = {**(payout.metadata or {}), 'initiation_error': str(exc)}
+            payout.save(update_fields=['status', 'metadata', 'updated_at'])
+            return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+        return Response(StorePayoutSerializer(payout).data)
+
+
+class AdminStorePayoutRefreshView(APIView):
+    permission_classes = [IsEditorOrAdmin]
+
+    def post(self, request, payout_id):
+        payout = get_object_or_404(StorePayout, id=payout_id)
+        if not payout.flutterwave_transfer_id:
+            return Response(StorePayoutSerializer(payout).data)
+        try:
+            body = get_transfer(payout.flutterwave_transfer_id)
+        except FlutterwaveError as exc:
+            return Response({'detail': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+        data = body.get('data') or {}
+        raw = str(data.get('status', '')).lower()
+        mapping = {
+            'successful': StorePayout.Status.SUCCESSFUL,
+            'failed': StorePayout.Status.FAILED,
+            'cancelled': StorePayout.Status.CANCELLED,
+            'pending': StorePayout.Status.PROCESSING,
+            'new': StorePayout.Status.PROCESSING,
+        }
+        payout.status = mapping.get(raw, payout.status)
+        if payout.status == StorePayout.Status.SUCCESSFUL and not payout.completed_at:
+            payout.completed_at = timezone.now()
+        payout.metadata = {**(payout.metadata or {}), 'status_check': body}
+        payout.save(update_fields=['status', 'completed_at', 'metadata', 'updated_at'])
+        return Response(StorePayoutSerializer(payout).data)
+
+
+class AdminPayoutConfigurationView(APIView):
+    permission_classes = [IsEditorOrAdmin]
+
+    def get(self, request):
+        return Response({
+            'destination_number': settings.FLW_PAYOUT_MOBILE_NUMBER,
+            'bank_code': settings.FLW_PAYOUT_BANK_CODE,
+            'beneficiary_name': settings.FLW_PAYOUT_BENEFICIARY_NAME,
+            'currency': 'UGX',
+            'automatic_payout': settings.FLW_AUTO_PAYOUT,
+        })

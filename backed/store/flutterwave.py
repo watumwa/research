@@ -100,3 +100,49 @@ def transaction_matches(payment, data):
         and str(data.get('currency', '')).upper() == payment.currency.upper()
         and amount >= payment.amount
     )
+
+
+def initiate_mobile_money_payout(payout):
+    """Send a payout from the merchant Flutterwave balance to the configured Uganda MoMo destination."""
+    payload = {
+        'account_bank': payout.destination_bank_code,
+        'account_number': payout.destination_number,
+        'amount': int(payout.amount) if payout.amount == int(payout.amount) else float(payout.amount),
+        'currency': payout.currency,
+        'beneficiary_name': payout.beneficiary_name,
+        'reference': payout.reference,
+        'narration': f'Payout for {payout.payment.tx_ref}',
+    }
+    try:
+        response = requests.post(
+            f'{settings.FLW_BASE_URL}/transfers',
+            json=payload,
+            headers=_headers(),
+            timeout=settings.FLW_HTTP_TIMEOUT,
+        )
+        body = response.json()
+    except requests.RequestException as exc:
+        raise FlutterwaveError(f'Could not reach Flutterwave for payout: {exc}') from exc
+    except ValueError as exc:
+        raise FlutterwaveError('Flutterwave returned an unreadable payout response.') from exc
+
+    if response.status_code >= 400 or body.get('status') != 'success':
+        raise FlutterwaveError(body.get('message') or 'Flutterwave could not create the payout.')
+    return body
+
+
+def get_transfer(transfer_id):
+    try:
+        response = requests.get(
+            f'{settings.FLW_BASE_URL}/transfers/{transfer_id}',
+            headers=_headers(),
+            timeout=settings.FLW_HTTP_TIMEOUT,
+        )
+        body = response.json()
+    except requests.RequestException as exc:
+        raise FlutterwaveError(f'Could not check Flutterwave payout: {exc}') from exc
+    except ValueError as exc:
+        raise FlutterwaveError('Flutterwave returned an unreadable payout-status response.') from exc
+    if response.status_code >= 400:
+        raise FlutterwaveError(body.get('message') or 'Flutterwave could not check the payout.')
+    return body

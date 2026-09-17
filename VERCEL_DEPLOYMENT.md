@@ -166,3 +166,24 @@ Never commit or upload these files/directories:
     .venv/
 
 The clean ZIP supplied with this implementation excludes local deployment credentials, local databases and virtual environments.
+
+## Payout environment variables
+
+Add these to the **backend** Vercel project only:
+
+```env
+FLW_PAYOUT_MOBILE_NUMBER=256762640590
+FLW_PAYOUT_BANK_CODE=MPS
+FLW_PAYOUT_BENEFICIARY_NAME=Research Skills Payout
+FLW_AUTO_PAYOUT=False
+```
+
+Do not add them as `VITE_*` variables. Payout execution must remain server-side.
+
+After deploying the updated backend, run the new database migration:
+
+```bash
+python manage.py migrate
+```
+
+The migration creates the `StorePayout` table used to track payouts to the configured destination.
