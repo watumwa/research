@@ -5,8 +5,8 @@ from .models import Material, StorePayment, StorePayout
 
 @admin.register(Material)
 class MaterialAdmin(ModelAdmin):
-    list_display = ('title', 'category', 'access', 'price', 'currency', 'download_count', 'is_published', 'updated_at')
-    list_filter = ('access', 'is_published', 'category', 'currency')
+    list_display = ('title', 'content_type', 'category', 'access', 'price', 'currency', 'cover_image', 'download_count', 'is_published', 'updated_at')
+    list_filter = ('content_type', 'access', 'is_published', 'category', 'currency')
     search_fields = ('title', 'description', 'category', 'slug')
     prepopulated_fields = {'slug': ('title',)}
     ordering = ('order', '-updated_at')

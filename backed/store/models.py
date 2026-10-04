@@ -16,15 +16,26 @@ class Material(TimeStampedModel):
         FREE = 'free', 'Free'
         PAID = 'paid', 'Paid'
 
+    class ContentType(models.TextChoices):
+        DOCUMENT = 'document', 'Document'
+        VIDEO = 'video', 'Video'
+
     title = models.CharField(max_length=220)
     slug = models.SlugField(unique=True)
     category = models.CharField(max_length=120, blank=True)
     description = models.TextField()
+    content_type = models.CharField(
+        max_length=12,
+        choices=ContentType.choices,
+        default=ContentType.DOCUMENT,
+    )
     file_type = models.CharField(max_length=20, default='PDF')
     access = models.CharField(max_length=12, choices=Access.choices, default=Access.FREE)
     price = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     currency = models.CharField(max_length=8, default='UGX')
     file = models.FileField(upload_to='materials/%Y/%m/', blank=True)
+    cover_image = models.FileField(upload_to='materials/covers/%Y/%m/', blank=True)
+    video_url = models.URLField(blank=True)
     download_count = models.PositiveIntegerField(default=0)
     is_published = models.BooleanField(default=True)
     order = models.PositiveIntegerField(default=0)

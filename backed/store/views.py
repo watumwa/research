@@ -1,6 +1,6 @@
 from django.conf import settings
 from django.db.models import Count, F, Sum
-from django.http import FileResponse
+from django.http import FileResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.utils.text import slugify
@@ -106,11 +106,18 @@ class FreeMaterialDownloadView(APIView):
 
     def get(self, request, slug):
         material = get_object_or_404(Material, slug=slug, is_published=True, access=Material.Access.FREE)
+        if material.content_type == Material.ContentType.VIDEO and material.video_url:
+            Material.objects.filter(pk=material.pk).update(download_count=F('download_count') + 1)
+            return HttpResponseRedirect(material.video_url)
         if not material.file:
-            return Response({'detail': 'The downloadable file has not been uploaded yet.'}, status=404)
+            return Response({'detail': 'The content file has not been uploaded yet.'}, status=404)
         Material.objects.filter(pk=material.pk).update(download_count=F('download_count') + 1)
         handle = material.file.open('rb')
-        return FileResponse(handle, as_attachment=True, filename=material.file.name.rsplit('/', 1)[-1])
+        return FileResponse(
+            handle,
+            as_attachment=material.content_type != Material.ContentType.VIDEO,
+            filename=material.file.name.rsplit('/', 1)[-1],
+        )
 
 
 class InitiateStorePaymentView(APIView):
@@ -197,9 +204,12 @@ class StorePaymentStatusView(APIView):
             'material': PublicMaterialSerializer(payment.material).data,
         }
         if payment.status == StorePayment.Status.PAID:
-            response['download_url'] = request.build_absolute_uri(
+            delivery_url = request.build_absolute_uri(
                 f'/api/store/payments/{payment.id}/download/?token={payment.download_token}'
             )
+            response['download_url'] = delivery_url
+            response['delivery_url'] = payment.material.video_url or delivery_url
+            response['delivery_type'] = payment.material.content_type
         return Response(response)
 
 
@@ -212,11 +222,18 @@ class PaidMaterialDownloadView(APIView):
         if payment.status != StorePayment.Status.PAID or token != str(payment.download_token):
             return Response({'detail': 'This paid download link is invalid or not yet active.'}, status=403)
         material = payment.material
+        if material.content_type == Material.ContentType.VIDEO and material.video_url:
+            Material.objects.filter(pk=material.pk).update(download_count=F('download_count') + 1)
+            return HttpResponseRedirect(material.video_url)
         if not material.file:
-            return Response({'detail': 'Payment is confirmed, but the downloadable file has not been uploaded yet.'}, status=404)
+            return Response({'detail': 'Payment is confirmed, but the content file has not been uploaded yet.'}, status=404)
         Material.objects.filter(pk=material.pk).update(download_count=F('download_count') + 1)
         handle = material.file.open('rb')
-        return FileResponse(handle, as_attachment=True, filename=material.file.name.rsplit('/', 1)[-1])
+        return FileResponse(
+            handle,
+            as_attachment=material.content_type != Material.ContentType.VIDEO,
+            filename=material.file.name.rsplit('/', 1)[-1],
+        )
 
 
 class FlutterwaveWebhookView(APIView):
@@ -283,6 +300,7 @@ class AdminStoreOverviewView(APIView):
             'published_materials': Material.objects.filter(is_published=True).count(),
             'paid_materials': Material.objects.filter(access=Material.Access.PAID).count(),
             'total_downloads': Material.objects.aggregate(total=Sum('download_count'))['total'] or 0,
+            'total_videos': Material.objects.filter(content_type=Material.ContentType.VIDEO).count(),
             'successful_sales': paid.count(),
             'revenue': revenue,
             'currency': 'UGX',
