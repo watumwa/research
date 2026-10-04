@@ -3,7 +3,8 @@ import { Routes, Route, Navigate, Link, NavLink, useNavigate } from 'react-route
 import {
   ArrowRight, BarChart3, BookOpen, CircleDollarSign, Download, FileText, FolderOpen,
   LayoutDashboard, LockKeyhole, LogOut, Menu, Plus, Search, ShoppingBag, Upload,
-  WalletCards, X, CheckCircle2, Eye, Trash2, Pencil, TrendingUp, RefreshCw, ExternalLink
+  WalletCards, X, CheckCircle2, Eye, Trash2, Pencil, TrendingUp, RefreshCw, ExternalLink,
+  PlayCircle, Video, Link2, FileUp, ImagePlus
 } from 'lucide-react'
 
 const API_URL = (import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api').replace(/\/$/, '')
@@ -30,6 +31,9 @@ function materialFromApi(m){
     downloads:Number(m.downloads||0),
     published:m.published ?? m.is_published ?? true,
     type:m.type || m.file_type || 'PDF',
+    contentType:m.content_type || 'document',
+    playbackUrl:m.playback_url || '',
+    coverUrl:m.cover_image || '',
     updated:m.updated_at ? new Date(m.updated_at).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}) : todayLabel(),
   }
 }
@@ -110,25 +114,28 @@ function PublicHome({materials,refreshMaterials,apiError,focusMaterials=false}){
   const [menu,setMenu]=useState(false)
   const [query,setQuery]=useState('')
   const [category,setCategory]=useState('All')
+  const [contentType,setContentType]=useState('all')
+  const [accessType,setAccessType]=useState('all')
   const [checkout,setCheckout]=useState(null)
+  const [viewer,setViewer]=useState(null)
   const [notice,setNotice]=useState('')
-  const [featuredIndex,setFeaturedIndex]=useState(0)
-  const [featuredPaused,setFeaturedPaused]=useState(false)
   const published=materials.filter(m=>m.published)
-  const featuredMaterials=useMemo(()=>[...published].sort((a,b)=>{
-    if(a.access!==b.access) return a.access==='paid'?-1:1
-    return b.downloads-a.downloads
-  }).slice(0,5),[published])
-  const featuredMaterial=featuredMaterials[featuredIndex] || featuredMaterials[0]
+  const popular=useMemo(()=>[...published].sort((a,b)=>b.downloads-a.downloads).slice(0,4),[published])
   const categories=['All',...new Set(published.map(m=>m.category).filter(Boolean))]
-  const visible=published.filter(m=>(category==='All'||m.category===category) && `${m.title} ${m.description} ${m.category}`.toLowerCase().includes(query.toLowerCase()))
+  const categoryHubs=useMemo(()=>{
+    const palette=['lime','coral','violet','teal']
+    const hubs=[...new Set(published.map(m=>m.category).filter(Boolean))].slice(0,4).map((label,index)=>({label,category:label,count:published.filter(m=>m.category===label).length,tone:palette[index]}))
+    if(hubs.length<4)hubs.push({label:'Video lessons',contentType:'video',count:published.filter(m=>m.contentType==='video').length,tone:palette[hubs.length]})
+    return hubs
+  },[published])
+  const visible=published.filter(m=>(category==='All'||m.category===category) && (contentType==='all'||m.contentType===contentType) && (accessType==='all'||m.access===accessType) && `${m.title} ${m.description} ${m.category}`.toLowerCase().includes(query.toLowerCase()))
   useEffect(()=>{if(focusMaterials)setTimeout(()=>document.getElementById('materials')?.scrollIntoView(),0)},[focusMaterials])
-  useEffect(()=>{setFeaturedIndex(current=>featuredMaterials.length?current%featuredMaterials.length:0)},[featuredMaterials.length])
-  useEffect(()=>{
-    if(featuredPaused || featuredMaterials.length<2) return
-    const timer=window.setInterval(()=>setFeaturedIndex(current=>(current+1)%featuredMaterials.length),5000)
-    return ()=>window.clearInterval(timer)
-  },[featuredMaterials.length,featuredPaused])
+
+  const showLibrary=({type='all',access='all',topic='All'}={})=>{
+    setContentType(type);setAccessType(access);setCategory(topic);setMenu(false)
+    requestAnimationFrame(()=>document.getElementById('materials')?.scrollIntoView({behavior:'smooth'}))
+  }
+  const selectHub=hub=>showLibrary({type:hub.contentType||'all',topic:hub.category||'All'})
 
   const downloadFree=async(m)=>{
     try{
@@ -141,51 +148,86 @@ function PublicHome({materials,refreshMaterials,apiError,focusMaterials=false}){
     setTimeout(()=>setNotice(''),3600)
   }
 
-  return <div className="simple-site">
-    <header className="simple-header"><div className="simple-container header-inner">
+  return <div className="simple-site resource-marketplace">
+    <header className="simple-header"><div className="market-container header-inner">
       <Brand/>
-      <nav className={menu?'open':''}><a href="#home" onClick={()=>setMenu(false)}>Home</a><a href="#materials" onClick={()=>setMenu(false)}>Materials</a><a href="#about" onClick={()=>setMenu(false)}>About</a><Link to="/admin/login" onClick={()=>setMenu(false)}>Admin login</Link></nav>
-      <Link className="simple-btn simple-btn--dark header-admin" to="/admin/login"><LockKeyhole size={16}/> Admin login</Link>
+      <nav className={menu?'open':''}><a href="#home" onClick={()=>setMenu(false)}>Home</a><button onClick={()=>showLibrary()}>Browse resources</button><button onClick={()=>showLibrary({type:'video'})}>Videos</button><a href="#about" onClick={()=>setMenu(false)}>How it works</a><Link to="/admin/login" onClick={()=>setMenu(false)}>Admin login</Link></nav>
+      <Link className="simple-btn simple-btn--dark header-admin" to="/admin/login"><LockKeyhole size={16}/> Publisher login</Link>
       <button className="mobile-menu" onClick={()=>setMenu(!menu)} aria-label="Toggle menu">{menu?<X/>:<Menu/>}</button>
     </div></header>
 
     {notice&&<div className="toast-demo"><CheckCircle2/> {notice}</div>}
     {apiError&&<div className="backend-warning">Backend connection unavailable. Catalogue fallback is visible, but live payments require the Django API.</div>}
 
-    <main>
-      <section className="simple-hero" id="home"><div className="simple-container hero-layout">
-        <div><span className="eyebrow-simple">LEARN • DOWNLOAD • GROW</span><h1>Learning materials,<br/><em>made simple.</em></h1><p>Browse useful notes and learning resources. Download free materials instantly, or pay once to access premium content.</p><div className="hero-buttons"><a href="#materials" className="simple-btn simple-btn--gold">Browse materials <ArrowRight size={17}/></a><a href="#about" className="plain-link">How it works <ArrowRight size={15}/></a></div></div>
-        {featuredMaterial&&<div className="hero-resource-card" onMouseEnter={()=>setFeaturedPaused(true)} onMouseLeave={()=>setFeaturedPaused(false)} onFocus={()=>setFeaturedPaused(true)} onBlur={event=>!event.currentTarget.contains(event.relatedTarget)&&setFeaturedPaused(false)}>
-          <div className="hero-card-content" key={featuredMaterial.id}>
-            <div className="hero-card-head"><FileText/><span>POPULAR MATERIAL</span></div>
-            <h3>{featuredMaterial.title}</h3><p>{featuredMaterial.description}</p>
-            <div className="hero-card-meta"><span>{featuredMaterial.type}</span><strong>{featuredMaterial.access==='free'?'Free':money(featuredMaterial.price)}</strong></div>
-            <a href="#materials" className="simple-btn simple-btn--light">View material</a>
-          </div>
-        </div>}
-      </div></section>
+    <main className="market-container library-shell" id="home">
+      <aside className="resource-sidebar" aria-label="Resource library navigation">
+        <div className="sidebar-welcome"><span>RS</span><div><strong>Learning library</strong><small>Find your next resource</small></div></div>
+        <div className="sidebar-group"><b>Resources</b><button className={contentType==='all'&&accessType==='all'?'active':''} onClick={()=>showLibrary()}><FolderOpen/> Browse all</button><button className={contentType==='video'?'active':''} onClick={()=>showLibrary({type:'video'})}><PlayCircle/> Video lessons</button><button className={contentType==='document'?'active':''} onClick={()=>showLibrary({type:'document'})}><Download/> Downloads</button></div>
+        <div className="sidebar-group"><b>Access</b><button className={accessType==='free'?'active':''} onClick={()=>showLibrary({access:'free'})}><BookOpen/> Free resources</button><button className={accessType==='paid'?'active':''} onClick={()=>showLibrary({access:'paid'})}><ShoppingBag/> Premium resources</button></div>
+        <div className="sidebar-group"><b>Topics</b>{categories.filter(c=>c!=='All').map(c=><button key={c} className={category===c?'active':''} onClick={()=>showLibrary({topic:c})}>{c}</button>)}</div>
+        <div className="sidebar-help"><strong>Need help?</strong><p>Choose a topic or search for a skill you want to build.</p><a href="#about">How the library works <ArrowRight/></a></div>
+      </aside>
 
-      <section className="quick-strip"><div className="simple-container quick-grid"><div><strong>{published.length}</strong><span>Learning materials</span></div><div><strong>{published.reduce((a,m)=>a+m.downloads,0).toLocaleString()}+</strong><span>Total downloads</span></div><div><strong>{published.filter(m=>m.access==='free').length}</strong><span>Free resources</span></div><div><strong>{published.filter(m=>m.access==='paid').length}</strong><span>Premium resources</span></div></div></section>
+      <div className="library-main">
+        <section className="resource-masthead">
+          <div className="masthead-copy"><span>RESEARCH SKILLS LIBRARY</span><h1>Learning resources</h1><p>Practical books, guides and video lessons for study, research and professional growth.</p></div>
+          <div className="masthead-mosaic" aria-hidden="true"><i/><i/><i/><i/><i/><i/></div>
+          <form className="market-search" onSubmit={e=>{e.preventDefault();showLibrary({type:contentType,access:accessType,topic:category})}}><Search/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search resources by keyword" aria-label="Search resources"/><button>Search</button></form>
+        </section>
 
-      <section className="materials-section" id="materials"><div className="simple-container">
-        <div className="section-heading"><div><span>RESOURCE LIBRARY</span><h2>Find what you need and download it.</h2><p>No courses, no complicated learning path. Just useful content in one clean library.</p></div></div>
-        <div className="materials-tools"><div className="material-search"><Search/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search materials..."/></div><div className="category-pills">{categories.map(c=><button key={c} className={category===c?'active':''} onClick={()=>setCategory(c)}>{c}</button>)}</div></div>
-        <div className="materials-grid">{visible.map(m=><MaterialCard key={m.id} material={m} onDownload={()=>downloadFree(m)} onBuy={()=>setCheckout(m)}/>)}</div>
-        {!visible.length&&<div className="empty-public"><FolderOpen/><h3>No materials found</h3><p>Try another search or category.</p></div>}
-      </div></section>
+        <section className="hub-grid" aria-label="Browse resource hubs">
+          {categoryHubs.map(hub=><button key={hub.label} className={`resource-hub hub--${hub.tone}`} onClick={()=>selectHub(hub)}><span><small>RESOURCE HUB</small><strong>{hub.label}</strong><em>{hub.count} {hub.count===1?'resource':'resources'}</em></span><i aria-hidden="true"/></button>)}
+        </section>
 
-      <section className="about-simple" id="about"><div className="simple-container about-grid"><div><span className="section-label">HOW IT WORKS</span><h2>Three simple steps.</h2><p>The platform is designed for people who just want to find useful material and get it without unnecessary steps.</p></div><div className="steps-simple"><article><b>1</b><div><h3>Find a material</h3><p>Search or browse the resource library.</p></div></article><article><b>2</b><div><h3>Pay with mobile money</h3><p>Premium materials use a secure MTN or Airtel Flutterwave payment request.</p></div></article><article><b>3</b><div><h3>Download and read</h3><p>The download unlocks only after Flutterwave confirms the payment.</p></div></article></div></div></section>
+        <section className="marketplace-section popular-section">
+          <div className="marketplace-heading"><h2>Popular resources</h2><span/><button onClick={()=>showLibrary()}>View all <ArrowRight/></button></div>
+          <div className="popular-grid">{popular.map(m=><MaterialCard compact key={m.id} material={m} onDownload={()=>downloadFree(m)} onWatch={()=>setViewer({material:m,source:m.playbackUrl})} onBuy={()=>setCheckout(m)}/>)}</div>
+        </section>
+
+        <section className="marketplace-section all-resources" id="materials">
+          <div className="marketplace-heading"><div><span>FULL LIBRARY</span><h2>Browse all resources</h2><p>{visible.length} {visible.length===1?'result':'results'} matching your filters</p></div><i/></div>
+          <div className="content-tabs" aria-label="Filter by content type"><button className={contentType==='all'?'active':''} onClick={()=>setContentType('all')}>All resources</button><button className={contentType==='video'?'active':''} onClick={()=>setContentType('video')}><PlayCircle/> Videos</button><button className={contentType==='document'?'active':''} onClick={()=>setContentType('document')}><FileText/> Downloads</button></div>
+          <div className="materials-tools"><div className="material-search"><Search/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search this library"/></div><div className="category-pills">{categories.map(c=><button key={c} className={category===c?'active':''} onClick={()=>setCategory(c)}>{c}</button>)}</div></div>
+          {(accessType!=='all'||query)&&<div className="active-filters"><span>Showing {accessType==='all'?'all access types':accessType} {query&&`for “${query}”`}</span><button onClick={()=>{setAccessType('all');setQuery('')}}>Clear filters <X/></button></div>}
+          <div className="materials-grid">{visible.map(m=><MaterialCard key={m.id} material={m} onDownload={()=>downloadFree(m)} onWatch={()=>setViewer({material:m,source:m.playbackUrl})} onBuy={()=>setCheckout(m)}/>)}</div>
+          {!visible.length&&<div className="empty-public"><FolderOpen/><h3>No resources found</h3><p>Try another keyword, topic or access type.</p><button className="simple-btn simple-btn--dark" onClick={()=>{setQuery('');setCategory('All');setContentType('all');setAccessType('all')}}>Show all resources</button></div>}
+        </section>
+
+        <section className="about-simple market-about" id="about"><div className="about-grid"><div><span className="section-label">HOW IT WORKS</span><h2>Find it. Open it. Learn.</h2><p>A straightforward library for learners who need useful content without a complicated course platform.</p></div><div className="steps-simple"><article><b>1</b><div><h3>Search or choose a hub</h3><p>Find content by topic, format or keyword.</p></div></article><article><b>2</b><div><h3>Open it—or pay once</h3><p>Free content opens immediately. Premium content uses secure Mobile Money.</p></div></article><article><b>3</b><div><h3>Watch or download</h3><p>Learn in the browser or keep the resource for later.</p></div></article></div></div></section>
+      </div>
     </main>
-    <footer className="simple-footer"><div className="simple-container"><Brand/><p>Simple learning resources for students, researchers and professionals.</p><span>© 2026 Research Skills.</span></div></footer>
-    {checkout&&<CheckoutModal material={checkout} onClose={()=>setCheckout(null)} onPaid={()=>refreshMaterials()}/>} 
+    <footer className="simple-footer"><div className="market-container"><Brand/><p>Simple learning resources for students, researchers and professionals.</p><span>© 2026 Research Skills.</span></div></footer>
+    {checkout&&<CheckoutModal material={checkout} onClose={()=>setCheckout(null)} onPaid={()=>refreshMaterials()} onWatch={(source)=>{setCheckout(null);setViewer({material:checkout,source})}}/>}
+    {viewer&&<VideoModal material={viewer.material} source={viewer.source} onClose={()=>setViewer(null)}/>}
   </div>
 }
 
-function MaterialCard({material,onDownload,onBuy}){
-  return <article className="material-card"><div className="material-card-top"><div className="file-icon"><FileText/></div><span className={`access-badge ${material.access}`}>{material.access==='free'?'FREE':'PREMIUM'}</span></div><div className="material-category">{material.category} • {material.type}</div><h3>{material.title}</h3><p>{material.description}</p><div className="material-card-foot"><div><small>{material.downloads.toLocaleString()} downloads</small><strong>{material.access==='free'?'Free':money(material.price)}</strong></div>{material.access==='free'?<button className="simple-btn simple-btn--dark" onClick={onDownload}><Download size={16}/> Download</button>:<button className="simple-btn simple-btn--gold" onClick={onBuy}><ShoppingBag size={16}/> Buy & download</button>}</div></article>
+function MaterialCard({material,onDownload,onWatch,onBuy,compact=false}){
+  const isVideo=material.contentType==='video'
+  return <article className={`material-card ${isVideo?'material-card--video':''} ${compact?'material-card--compact':''}`}><div className="material-cover">{material.coverUrl?<img src={material.coverUrl} alt={`${material.title} cover`} loading="lazy"/>:<div className="material-cover-fallback">{isVideo?<PlayCircle/>:<BookOpen/>}<span>{material.category}</span></div>}<span className={`access-badge ${material.access}`}>{material.access==='free'?'FREE':'PREMIUM'}</span>{isVideo&&<span className="cover-play"><PlayCircle/></span>}</div><div className="material-card-body"><div className="material-category">{material.category} • {isVideo?'VIDEO':material.type}</div><h3>{material.title}</h3><p>{material.description}</p><div className="material-card-foot"><div><small>{material.downloads.toLocaleString()} {isVideo?'views':'downloads'}</small><strong>{material.access==='free'?'Free':money(material.price)}</strong></div>{material.access==='free'?(isVideo?<button className="simple-btn simple-btn--dark" onClick={onWatch} disabled={!material.playbackUrl}><PlayCircle size={16}/> Watch now</button>:<button className="simple-btn simple-btn--dark" onClick={onDownload}><Download size={16}/> Download</button>):<button className="simple-btn simple-btn--gold" onClick={onBuy}><ShoppingBag size={16}/> {isVideo?'Buy & watch':'Buy & download'}</button>}</div></div></article>
 }
 
-function CheckoutModal({material,onClose,onPaid}){
+function toPlayableSource(source=''){
+  try{
+    const url=new URL(source,window.location.origin)
+    const host=url.hostname.replace(/^www\./,'')
+    if(host==='youtu.be')return {src:`https://www.youtube.com/embed/${url.pathname.slice(1)}`,embed:true}
+    if(host.endsWith('youtube.com')){
+      const id=url.searchParams.get('v')||url.pathname.split('/').filter(Boolean).pop()
+      return {src:`https://www.youtube.com/embed/${id}`,embed:true}
+    }
+    if(host.endsWith('vimeo.com'))return {src:`https://player.vimeo.com/video/${url.pathname.split('/').filter(Boolean).pop()}`,embed:true}
+    return {src:url.href,embed:false}
+  }catch{return {src:source,embed:false}}
+}
+
+function VideoModal({material,source,onClose}){
+  const playable=toPlayableSource(source)
+  useEffect(()=>{const close=e=>e.key==='Escape'&&onClose();window.addEventListener('keydown',close);return()=>window.removeEventListener('keydown',close)},[onClose])
+  return <div className="modal-backdrop video-backdrop" onMouseDown={e=>e.target===e.currentTarget&&onClose()}><div className="video-modal" role="dialog" aria-modal="true" aria-label={material.title}><button className="modal-close" onClick={onClose} aria-label="Close video"><X/></button><div className="video-frame">{playable.embed?<iframe src={playable.src} title={material.title} allow="autoplay; encrypted-media; picture-in-picture" allowFullScreen/>:<video src={playable.src} controls autoPlay playsInline/>}</div><div className="video-copy"><span>{material.category} • VIDEO</span><h2>{material.title}</h2><p>{material.description}</p></div></div></div>
+}
+
+function CheckoutModal({material,onClose,onPaid,onWatch}){
   const [network,setNetwork]=useState('MTN')
   const [phone,setPhone]=useState('')
   const [name,setName]=useState('')
@@ -235,7 +277,7 @@ function CheckoutModal({material,onClose,onPaid}){
     {stage==='form'&&<form onSubmit={submit} className="checkout-form"><label>Full name<input required value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. Sarah Namusoke"/></label><label>Email address<input required type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="sarah@example.com"/></label><label>Mobile Money network<select value={network} onChange={e=>setNetwork(e.target.value)}><option value="MTN">MTN Mobile Money</option><option value="AIRTEL">Airtel Money</option></select></label><label>Phone number<input required value={phone} onChange={e=>setPhone(e.target.value)} placeholder="07xx xxx xxx"/></label>{error&&<div className="checkout-error">{error}</div>}<button className="simple-btn simple-btn--gold simple-btn--full">Pay {money(material.price)} <ArrowRight/></button><small className="demo-note">The amount and material are verified by the Django server; Flutterwave secret keys never enter the browser.</small></form>}
     {stage==='starting'&&<div className="payment-state"><RefreshCw className="spin"/><h3>Starting secure payment…</h3><p>Connecting to Flutterwave.</p></div>}
     {stage==='waiting'&&<div className="payment-state"><span className="payment-phone">{network}</span><h3>Check your phone</h3><p>A payment request for <strong>{money(material.price)}</strong> has been started for <strong>{payment?.phone}</strong>. Approve it with your Mobile Money PIN.</p>{payment?.redirect_url&&<a className="simple-btn simple-btn--outline simple-btn--full" href={payment.redirect_url} target="_blank" rel="noreferrer">Continue Flutterwave confirmation <ExternalLink size={16}/></a>}<button className="simple-btn simple-btn--dark simple-btn--full" onClick={()=>checkStatus()}><RefreshCw size={16}/> Check payment now</button>{error&&<div className="checkout-error">{error}</div>}<small className="demo-note">Keep this window open. Payment status is re-checked automatically.</small></div>}
-    {stage==='paid'&&<div className="payment-state payment-success"><CheckCircle2/><h3>Payment successful</h3><p>Flutterwave confirmed the payment. Your material is now unlocked.</p>{statusData?.download_url&&<a className="simple-btn simple-btn--gold simple-btn--full" href={statusData.download_url}><Download size={16}/> Download {material.type}</a>}<small className="demo-note">Reference: {statusData?.tx_ref}</small></div>}
+    {stage==='paid'&&<div className="payment-state payment-success"><CheckCircle2/><h3>Payment successful</h3><p>Flutterwave confirmed the payment. Your content is now unlocked.</p>{material.contentType==='video'&&statusData?.delivery_url?<button className="simple-btn simple-btn--gold simple-btn--full" onClick={()=>onWatch(statusData.delivery_url)}><PlayCircle size={16}/> Watch video</button>:statusData?.download_url&&<a className="simple-btn simple-btn--gold simple-btn--full" href={statusData.download_url}><Download size={16}/> Download {material.type}</a>}<small className="demo-note">Reference: {statusData?.tx_ref}</small></div>}
     {stage==='failed'&&<div className="payment-state"><X/><h3>Payment not completed</h3><p>{error}</p><button className="simple-btn simple-btn--dark simple-btn--full" onClick={restart}>Try again</button></div>}
   </div></div>
 }
@@ -254,7 +296,7 @@ function AdminLogin(){
       setError(err.message.includes('permission')?'This account is not allowed to manage store content.':err.message)
     }finally{setBusy(false)}
   }
-  return <div className="admin-login-page"><div className="login-brand-row"><Brand/><Link to="/">Back to website</Link></div><div className="login-shell"><section className="login-side"><span>CONTENT OWNER PORTAL</span><h1>Manage your learning materials in one place.</h1><p>Upload content, see what people download, track Flutterwave sales and monitor revenue without using the Django super-admin screen.</p><div className="login-benefits"><span><Upload/> Upload materials</span><span><BarChart3/> See download statistics</span><span><CircleDollarSign/> Track sales and revenue</span></div></section><form className="login-card" onSubmit={submit}><span className="section-label">ADMIN LOGIN</span><h2>Welcome back</h2><p>Sign in with your Django administrator or content-editor account.</p>{error&&<div className="login-error">{error}</div>}<label>Email address<input required type="email" value={email} onChange={e=>setEmail(e.target.value)}/></label><label>Password<input required type="password" value={password} onChange={e=>setPassword(e.target.value)}/></label><button disabled={busy} className="simple-btn simple-btn--dark simple-btn--full">{busy?'Signing in…':'Sign in'} <ArrowRight/></button></form></div></div>
+  return <div className="admin-login-page"><div className="login-brand-row"><Brand/><Link to="/">Back to website</Link></div><div className="login-shell"><section className="login-side"><span>CONTENT OWNER PORTAL</span><h1>Share learning content without the fuss.</h1><p>Publish a document or video in a few clear steps, then see what people are using—all from one simple dashboard.</p><div className="login-benefits"><span><Upload/> Add documents and videos</span><span><BarChart3/> See learner activity</span><span><CircleDollarSign/> Track sales and revenue</span></div></section><form className="login-card" onSubmit={submit}><span className="section-label">ADMIN LOGIN</span><h2>Welcome back</h2><p>Sign in with your Django administrator or content-editor account.</p>{error&&<div className="login-error">{error}</div>}<label>Email address<input required type="email" value={email} onChange={e=>setEmail(e.target.value)}/></label><label>Password<input required type="password" value={password} onChange={e=>setPassword(e.target.value)}/></label><button disabled={busy} className="simple-btn simple-btn--dark simple-btn--full">{busy?'Signing in…':'Sign in'} <ArrowRight/></button></form></div></div>
 }
 
 function AdminGuard({children}){return localStorage.getItem(ADMIN_ACCESS)?children:<Navigate to="/admin/login" replace/>}
@@ -285,8 +327,8 @@ function AdminApp({onMaterialsChanged}){
   }
   useEffect(()=>{load()},[])
   const updateMaterial=async(id,patch)=>{
-    if(patch.file instanceof File){
-      const fd=new FormData();fd.append('file',patch.file);if(patch.type)fd.append('type',patch.type)
+    if(patch.file instanceof File || patch.cover instanceof File){
+      const fd=new FormData();if(patch.file)fd.append('file',patch.file);if(patch.cover)fd.append('cover_image',patch.cover);if(patch.type)fd.append('type',patch.type)
       await api(`/store/admin/materials/${id}/`,{auth:true,method:'PATCH',body:fd})
     }else{
       await api(`/store/admin/materials/${id}/`,{auth:true,method:'PATCH',body:JSON.stringify(patch)})
@@ -297,10 +339,10 @@ function AdminApp({onMaterialsChanged}){
   const sendPayout=async id=>{await api(`/store/admin/payouts/${id}/send/`,{auth:true,method:'POST',body:'{}'});await load()}
   const refreshPayout=async id=>{await api(`/store/admin/payouts/${id}/refresh/`,{auth:true,method:'POST',body:'{}'});await load()}
   const addMaterial=async form=>{
-    const fd=new FormData();fd.append('title',form.title);fd.append('category',form.category);fd.append('description',form.description);fd.append('type',form.type);fd.append('access',form.access);fd.append('price',form.access==='paid'?form.price||0:0);fd.append('currency','UGX');fd.append('published','true');if(form.file)fd.append('file',form.file)
+    const fd=new FormData();fd.append('title',form.title);fd.append('category',form.category);fd.append('description',form.description);fd.append('content_type',form.contentType);fd.append('type',form.contentType==='video'?'VIDEO':form.type);fd.append('access',form.access);fd.append('price',form.access==='paid'?form.price||0:0);fd.append('currency','UGX');fd.append('published','true');if(form.file)fd.append('file',form.file);if(form.cover)fd.append('cover_image',form.cover);if(form.videoUrl)fd.append('video_url',form.videoUrl)
     await api('/store/admin/materials/',{auth:true,method:'POST',body:fd});await load();onMaterialsChanged?.()
   }
-  return <div className="admin-app"><aside className={sidebar?'open':''}><div className="admin-aside-head"><Brand/><button onClick={()=>setSidebar(false)}><X/></button></div><div className="owner-chip"><div>RS</div><span><strong>Content Owner</strong><small>Administrator</small></span></div><nav><AdminNav to="/admin/dashboard" icon={<LayoutDashboard/>}>Overview</AdminNav><AdminNav to="/admin/materials" icon={<FileText/>}>Materials</AdminNav><AdminNav to="/admin/upload" icon={<Upload/>}>Upload material</AdminNav><AdminNav to="/admin/sales" icon={<WalletCards/>}>Sales & revenue</AdminNav></nav><div className="aside-bottom"><Link to="/" target="_blank"><Eye/> View public website</Link><button onClick={logout}><LogOut/> Sign out</button></div></aside><div className="admin-main"><header className="admin-topbar"><button className="admin-menu" onClick={()=>setSidebar(true)}><Menu/></button><div><strong>Content Management</strong><small>Live Django + Flutterwave dashboard</small></div><Link to="/admin/upload" className="simple-btn simple-btn--dark"><Plus/> Add material</Link></header><main className="admin-content">{error&&<div className="login-error">{error}</div>}<Routes><Route path="dashboard" element={<Overview data={data}/>}/><Route path="materials" element={<MaterialsAdmin data={data} updateMaterial={updateMaterial} deleteMaterial={deleteMaterial}/>}/><Route path="upload" element={<UploadMaterial addMaterial={addMaterial}/>}/><Route path="sales" element={<SalesAdmin data={data} sendPayout={sendPayout} refreshPayout={refreshPayout}/>}/><Route path="*" element={<Navigate to="dashboard" replace/>}/></Routes></main></div></div>
+  return <div className="admin-app"><aside className={sidebar?'open':''}><div className="admin-aside-head"><Brand/><button onClick={()=>setSidebar(false)}><X/></button></div><div className="owner-chip"><div>RS</div><span><strong>Content Owner</strong><small>Administrator</small></span></div><nav><AdminNav to="/admin/dashboard" icon={<LayoutDashboard/>}>Overview</AdminNav><AdminNav to="/admin/materials" icon={<FileText/>}>My content</AdminNav><AdminNav to="/admin/upload" icon={<Upload/>}>Add content</AdminNav><AdminNav to="/admin/sales" icon={<WalletCards/>}>Sales & revenue</AdminNav></nav><div className="aside-bottom"><Link to="/" target="_blank"><Eye/> View public website</Link><button onClick={logout}><LogOut/> Sign out</button></div></aside><div className="admin-main"><header className="admin-topbar"><button className="admin-menu" onClick={()=>setSidebar(true)}><Menu/></button><div><strong>Content Management</strong><small>Documents, videos and payments in one place</small></div><Link to="/admin/upload" className="simple-btn simple-btn--dark"><Plus/> Add content</Link></header><main className="admin-content">{error&&<div className="login-error">{error}</div>}<Routes><Route path="dashboard" element={<Overview data={data}/>}/><Route path="materials" element={<MaterialsAdmin data={data} updateMaterial={updateMaterial} deleteMaterial={deleteMaterial}/>}/><Route path="upload" element={<UploadMaterial addMaterial={addMaterial}/>}/><Route path="sales" element={<SalesAdmin data={data} sendPayout={sendPayout} refreshPayout={refreshPayout}/>}/><Route path="*" element={<Navigate to="dashboard" replace/>}/></Routes></main></div></div>
 }
 function AdminNav({to,icon,children}){return <NavLink to={to} className={({isActive})=>isActive?'active':''}>{icon}<span>{children}</span></NavLink>}
 
@@ -309,7 +351,7 @@ function Overview({data}){
   const top=[...data.materials].sort((a,b)=>b.downloads-a.downloads).slice(0,5)
   const max=Math.max(...top.map(m=>m.downloads),1)
   const successful=data.sales.filter(s=>s.status==='paid')
-  return <div><AdminHeading label="OVERVIEW" title="Store performance" text="Live material, download and Flutterwave payment statistics from Django."/><div className="metric-grid"><Metric icon={<FileText/>} label="Total materials" value={overview.total_materials??data.materials.length} note={`${overview.published_materials??data.materials.filter(m=>m.published).length} published`}/><Metric icon={<Download/>} label="Total downloads" value={Number(overview.total_downloads||0).toLocaleString()} note="Verified file downloads"/><Metric icon={<ShoppingBag/>} label="Successful sales" value={overview.successful_sales??successful.length} note={`${overview.paid_materials??data.materials.filter(m=>m.access==='paid').length} paid materials`}/><Metric icon={<CircleDollarSign/>} label="Total revenue" value={money(overview.revenue||0)} note="Confirmed Flutterwave revenue"/></div><div className="overview-grid"><section className="admin-panel"><div className="panel-head"><div><h3>Most downloaded materials</h3><p>See what your audience is using most.</p></div><Link to="/admin/materials">View all</Link></div><div className="download-bars">{top.map((m,i)=><div className="download-bar" key={m.id}><span className="rank">{i+1}</span><div className="bar-info"><div><strong>{m.title}</strong><small>{m.downloads.toLocaleString()} downloads</small></div><i><b style={{width:`${m.downloads/max*100}%`}}/></i></div></div>)}</div></section><section className="admin-panel"><div className="panel-head"><div><h3>Recent successful sales</h3><p>Latest confirmed premium downloads.</p></div><Link to="/admin/sales">View all</Link></div><div className="recent-sales">{successful.slice(0,5).map(s=><div key={s.id}><span className="sale-icon"><CircleDollarSign/></span><div><strong>{s.material}</strong><small>{s.customer} • {s.method}</small></div><b>{money(s.amount)}</b></div>)}</div></section></div></div>
+  return <div><AdminHeading label="OVERVIEW" title="Your content at a glance" text="See what is published, what learners use and what has sold."/><div className="metric-grid"><Metric icon={<FileText/>} label="Total content" value={overview.total_materials??data.materials.length} note={`${overview.published_materials??data.materials.filter(m=>m.published).length} published`}/><Metric icon={<Video/>} label="Video lessons" value={overview.total_videos??data.materials.filter(m=>m.contentType==='video').length} note="Uploaded or linked videos"/><Metric icon={<ShoppingBag/>} label="Successful sales" value={overview.successful_sales??successful.length} note={`${overview.paid_materials??data.materials.filter(m=>m.access==='paid').length} premium resources`}/><Metric icon={<CircleDollarSign/>} label="Total revenue" value={money(overview.revenue||0)} note="Confirmed Flutterwave revenue"/></div><div className="overview-grid"><section className="admin-panel"><div className="panel-head"><div><h3>Most-used content</h3><p>See what your audience opens most.</p></div><Link to="/admin/materials">View all</Link></div><div className="download-bars">{top.map((m,i)=><div className="download-bar" key={m.id}><span className="rank">{i+1}</span><div className="bar-info"><div><strong>{m.title}</strong><small>{m.downloads.toLocaleString()} {m.contentType==='video'?'views':'downloads'}</small></div><i><b style={{width:`${m.downloads/max*100}%`}}/></i></div></div>)}</div></section><section className="admin-panel"><div className="panel-head"><div><h3>Recent successful sales</h3><p>Latest confirmed premium purchases.</p></div><Link to="/admin/sales">View all</Link></div><div className="recent-sales">{successful.slice(0,5).map(s=><div key={s.id}><span className="sale-icon"><CircleDollarSign/></span><div><strong>{s.material}</strong><small>{s.customer} • {s.method}</small></div><b>{money(s.amount)}</b></div>)}</div></section></div></div>
 }
 function Metric({icon,label,value,note}){return <article className="metric-card"><span className="metric-icon">{icon}</span><div><small>{label}</small><strong>{value}</strong><p>{note}</p></div></article>}
 function AdminHeading({label,title,text,action}){return <div className="admin-heading"><div><span>{label}</span><h1>{title}</h1><p>{text}</p></div>{action}</div>}
@@ -319,14 +361,52 @@ function MaterialsAdmin({data,updateMaterial,deleteMaterial}){
   const rows=data.materials.filter(m=>(filter==='all'||m.access===filter)&&`${m.title} ${m.category}`.toLowerCase().includes(q.toLowerCase()))
   const update=async(id,patch)=>{try{setError('');await updateMaterial(id,patch)}catch(err){setError(err.message)}}
   const remove=async m=>{if(!confirm(`Delete ${m.title}?`))return;try{setError('');await deleteMaterial(m.id)}catch(err){setError(err.message)}}
-  return <div><AdminHeading label="CONTENT" title="Materials" text="All free and paid learning resources stored by Django." action={<Link to="/admin/upload" className="simple-btn simple-btn--dark"><Plus/> Add material</Link>}/>{error&&<div className="login-error">{error}</div>}<div className="admin-filterbar"><div className="material-search"><Search/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search materials"/></div><select value={filter} onChange={e=>setFilter(e.target.value)}><option value="all">All access types</option><option value="free">Free</option><option value="paid">Paid</option></select></div><section className="admin-panel table-panel"><div className="data-table material-table"><div className="data-row data-head"><span>Material</span><span>Access</span><span>Price</span><span>Downloads</span><span>Status</span><span>Actions</span></div>{rows.map(m=><div className="data-row" key={m.id}><span className="material-cell"><i><FileText/></i><span><strong>{m.title}</strong><small>{m.category} • {m.type}</small></span></span><span><em className={`access-pill ${m.access}`}>{m.access}</em></span><span>{m.access==='paid'?money(m.price):'—'}</span><span>{m.downloads.toLocaleString()}</span><span><button className={`status-toggle ${m.published?'on':''}`} onClick={()=>update(m.id,{published:!m.published})}><i/>{m.published?'Published':'Hidden'}</button></span><span className="row-actions"><label className="row-file-action" title={m.file_name?'Replace file':'Upload file'}><Upload/><input type="file" onChange={e=>{const f=e.target.files?.[0];if(f)update(m.id,{file:f,type:(f.name.split('.').pop()||m.type).toUpperCase()})}}/></label><button title="Rename" onClick={()=>{const t=prompt('Material title',m.title);if(t)update(m.id,{title:t})}}><Pencil/></button><button title="Delete" onClick={()=>remove(m)}><Trash2/></button></span></div>)}</div></section></div>
+  return <div><AdminHeading label="CONTENT" title="My content" text="Documents and videos in your public learning library." action={<Link to="/admin/upload" className="simple-btn simple-btn--dark"><Plus/> Add content</Link>}/>{error&&<div className="login-error">{error}</div>}<div className="admin-filterbar"><div className="material-search"><Search/><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search content"/></div><select value={filter} onChange={e=>setFilter(e.target.value)}><option value="all">All access types</option><option value="free">Free</option><option value="paid">Paid</option></select></div><section className="admin-panel table-panel"><div className="data-table material-table"><div className="data-row data-head"><span>Content</span><span>Access</span><span>Price</span><span>Activity</span><span>Status</span><span>Actions</span></div>{rows.map(m=><div className="data-row" key={m.id}><span className="material-cell"><i>{m.coverUrl?<img src={m.coverUrl} alt=""/>:m.contentType==='video'?<Video/>:<FileText/>}</i><span><strong>{m.title}</strong><small>{m.category} • {m.contentType==='video'?'Video':m.type}</small></span></span><span><em className={`access-pill ${m.access}`}>{m.access}</em></span><span>{m.access==='paid'?money(m.price):'—'}</span><span>{m.downloads.toLocaleString()}</span><span><button className={`status-toggle ${m.published?'on':''}`} onClick={()=>update(m.id,{published:!m.published})}><i/>{m.published?'Published':'Hidden'}</button></span><span className="row-actions"><label className="row-file-action" title="Replace cover photo"><ImagePlus/><input type="file" accept="image/jpeg,image/png,image/webp" onChange={e=>{const cover=e.target.files?.[0];if(cover)update(m.id,{cover})}}/></label><label className="row-file-action" title={m.file_name?'Replace content file':'Upload content file'}><Upload/><input type="file" accept={m.contentType==='video'?'video/*':'.pdf,.doc,.docx,.ppt,.pptx,.zip'} onChange={e=>{const f=e.target.files?.[0];if(f)update(m.id,{file:f,type:m.contentType==='video'?'VIDEO':(f.name.split('.').pop()||m.type).toUpperCase()})}}/></label><button title="Rename" onClick={()=>{const t=prompt('Content title',m.title);if(t)update(m.id,{title:t})}}><Pencil/></button><button title="Delete" onClick={()=>remove(m)}><Trash2/></button></span></div>)}</div></section></div>
 }
 
 function UploadMaterial({addMaterial}){
-  const nav=useNavigate();const [saved,setSaved]=useState(false);const [error,setError]=useState('');const [busy,setBusy]=useState(false);const [form,setForm]=useState({title:'',category:'Research',description:'',type:'PDF',access:'free',price:'',file:null})
+  const nav=useNavigate();const [saved,setSaved]=useState(false);const [error,setError]=useState('');const [busy,setBusy]=useState(false);const [coverPreview,setCoverPreview]=useState('');const [form,setForm]=useState({title:'',category:'Research',description:'',contentType:'document',videoSource:'upload',videoUrl:'',type:'PDF',access:'free',price:'',file:null,cover:null})
   const set=(k,v)=>setForm(f=>({...f,[k]:v}))
-  const submit=async e=>{e.preventDefault();setBusy(true);setError('');try{await addMaterial(form);setSaved(true);setTimeout(()=>nav('/admin/materials'),700)}catch(err){setError(err.message)}finally{setBusy(false)}}
-  return <div><AdminHeading label="CONTENT" title="Upload a new material" text="Add the real downloadable file and decide whether access is free or paid."/><form className="upload-form admin-panel" onSubmit={submit}>{saved&&<div className="success-message"><CheckCircle2/> Material uploaded successfully.</div>}{error&&<div className="login-error">{error}</div>}<div className="form-two"><label>Material title<input required value={form.title} onChange={e=>set('title',e.target.value)} placeholder="e.g. Research Methodology Notes"/></label><label>Category<select value={form.category} onChange={e=>set('category',e.target.value)}><option>Research</option><option>Communication</option><option>Data Analysis</option><option>Career</option><option>Other</option></select></label></div><label>Description<textarea required rows="4" value={form.description} onChange={e=>set('description',e.target.value)} placeholder="Briefly explain what this material contains..."/></label><div className="upload-zone"><Upload/><strong>Choose the real file to upload</strong><span>PDF, DOCX, PPTX or ZIP</span><input type="file" onChange={e=>set('file',e.target.files?.[0]||null)}/>{form.file&&<b>{form.file.name}</b>}</div><div className="form-two"><label>File type<select value={form.type} onChange={e=>set('type',e.target.value)}><option>PDF</option><option>DOCX</option><option>PPTX</option><option>ZIP</option></select></label><label>Access<select value={form.access} onChange={e=>set('access',e.target.value)}><option value="free">Free download</option><option value="paid">Paid material</option></select></label></div>{form.access==='paid'&&<label>Price (UGX)<input type="number" min="1" required value={form.price} onChange={e=>set('price',e.target.value)} placeholder="15000"/></label>}<div className="form-actions"><Link to="/admin/materials" className="simple-btn simple-btn--outline">Cancel</Link><button disabled={busy} className="simple-btn simple-btn--dark"><Upload/> {busy?'Uploading…':'Publish material'}</button></div></form></div>
+  useEffect(()=>()=>{if(coverPreview)URL.revokeObjectURL(coverPreview)},[coverPreview])
+  const chooseCover=file=>{set('cover',file);setCoverPreview(file?URL.createObjectURL(file):'')}
+  const changeContentType=contentType=>setForm(f=>({...f,contentType,file:null,videoUrl:'',type:contentType==='video'?'VIDEO':'PDF'}))
+  const submit=async e=>{e.preventDefault();setError('');if(!form.cover){setError('Choose a cover photo for this content.');return}if(form.contentType==='video'&&form.videoSource==='link'&&!form.videoUrl){setError('Add the video link before publishing.');return}if((form.contentType==='document'||form.videoSource==='upload')&&!form.file){setError(`Choose a ${form.contentType==='video'?'video':'document'} to upload.`);return}setBusy(true);try{await addMaterial({...form,file:form.videoSource==='link'?null:form.file,videoUrl:form.videoSource==='link'?form.videoUrl:''});setSaved(true);setTimeout(()=>nav('/admin/materials'),700)}catch(err){setError(err.message)}finally{setBusy(false)}}
+  return <div>
+    <AdminHeading label="CONTENT" title="Add something new" text="Choose a format, add the details, then publish."/>
+    <form className="upload-form admin-panel" onSubmit={submit}>
+      {saved&&<div className="success-message"><CheckCircle2/> Your content is now published.</div>}
+      {error&&<div className="login-error">{error}</div>}
+      <fieldset className="upload-step">
+        <legend><b>1</b><span>What are you sharing?</span></legend>
+        <div className="content-choice">
+          <button type="button" className={form.contentType==='document'?'active':''} onClick={()=>changeContentType('document')}><FileText/><span><strong>A document</strong><small>PDF, Word, slides or ZIP</small></span></button>
+          <button type="button" className={form.contentType==='video'?'active':''} onClick={()=>changeContentType('video')}><Video/><span><strong>A video lesson</strong><small>Upload a video or paste a link</small></span></button>
+        </div>
+      </fieldset>
+      <fieldset className="upload-step">
+        <legend><b>2</b><span>Tell learners about it</span></legend>
+        <div className="form-two">
+          <label>Title<input required value={form.title} onChange={e=>set('title',e.target.value)} placeholder={form.contentType==='video'?'e.g. Writing a strong research question':'e.g. Research Methodology Notes'}/></label>
+          <label>Category<select value={form.category} onChange={e=>set('category',e.target.value)}><option>Research</option><option>Communication</option><option>Data Analysis</option><option>Career</option><option>Other</option></select></label>
+        </div>
+        <label>Short description<textarea required rows="3" value={form.description} onChange={e=>set('description',e.target.value)} placeholder="What will someone learn from this?"/></label>
+      </fieldset>
+      <fieldset className="upload-step">
+        <legend><b>3</b><span>Add a cover and the {form.contentType==='video'?'video':'file'}</span></legend>
+        <div className="cover-upload-row">
+          <label className={`cover-upload ${coverPreview?'has-image':''}`}>
+            {coverPreview?<img src={coverPreview} alt="Cover preview"/>:<span><ImagePlus/><strong>Add cover photo</strong><small>JPG, PNG or WebP · max 5 MB</small></span>}
+            <input type="file" required accept="image/jpeg,image/png,image/webp" onChange={e=>chooseCover(e.target.files?.[0]||null)}/>
+          </label>
+          <div className="cover-upload-copy"><strong>Choose a clear, attractive cover.</strong><p>This is the first image learners will see in the library. Portrait or landscape images both work.</p>{form.cover&&<small><CheckCircle2/> {form.cover.name}</small>}</div>
+        </div>
+        {form.contentType==='video'&&<div className="source-choice"><button type="button" className={form.videoSource==='upload'?'active':''} onClick={()=>set('videoSource','upload')}><FileUp/> Upload video</button><button type="button" className={form.videoSource==='link'?'active':''} onClick={()=>set('videoSource','link')}><Link2/> Paste video link</button></div>}
+        {form.contentType==='video'&&form.videoSource==='link'?<label>Video link<input required type="url" value={form.videoUrl} onChange={e=>set('videoUrl',e.target.value)} placeholder="YouTube, Vimeo or a direct video URL"/></label>:<div className="upload-zone">{form.contentType==='video'?<Video/>:<Upload/>}<strong>Choose {form.contentType==='video'?'a video':'the document'} to upload</strong><span>{form.contentType==='video'?'MP4, WebM or MOV':'PDF, DOCX, PPTX or ZIP'}</span><input type="file" accept={form.contentType==='video'?'video/mp4,video/webm,video/quicktime':'.pdf,.doc,.docx,.ppt,.pptx,.zip'} onChange={e=>{const file=e.target.files?.[0]||null;setForm(f=>({...f,file,type:f.contentType==='video'?'VIDEO':(file?.name.split('.').pop()||'PDF').toUpperCase()}))}}/>{form.file&&<b>{form.file.name}</b>}</div>}
+        <div className="form-two"><label>Who can access it?<select value={form.access} onChange={e=>set('access',e.target.value)}><option value="free">Everyone — free</option><option value="paid">Premium — pay once</option></select></label>{form.access==='paid'&&<label>Price (UGX)<input type="number" min="1" required value={form.price} onChange={e=>set('price',e.target.value)} placeholder="15000"/></label>}</div>
+      </fieldset>
+      <div className="form-actions"><Link to="/admin/materials" className="simple-btn simple-btn--outline">Cancel</Link><button disabled={busy} className="simple-btn simple-btn--dark"><Upload/> {busy?'Publishing…':'Publish now'}</button></div>
+    </form>
+  </div>
 }
 
 function SalesAdmin({data,sendPayout,refreshPayout}){
